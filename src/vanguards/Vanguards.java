@@ -1,12 +1,15 @@
-import javax.swing.*;
-import javax.swing.border.*;
+package vanguards;
+
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.geom.*;
 import java.util.*;
 import java.util.List;
 import java.util.function.Supplier;
+import javax.swing.*;
 import javax.swing.Timer;
+import javax.swing.border.*;
+import vanguards.ui.ScrollUI;
 
 public class Vanguards extends JFrame {
     
@@ -506,6 +509,9 @@ public class Vanguards extends JFrame {
             JScrollPane logScroll = new JScrollPane(log);
             logScroll.setPreferredSize(new Dimension(450, 300)); 
             logScroll.setBorder(BorderFactory.createLineBorder(ACCENT_COL.darker(), 2));
+            //scrollbarshit
+            logScroll.getVerticalScrollBar().setUI(new ScrollUI(ACCENT_COL, new Color(30, 30, 35), 12, 10));
+            logScroll.getHorizontalScrollBar().setUI(new ScrollUI(ACCENT_COL, new Color(30, 30, 35), 12, 10));
             
             menuPanel.setOpaque(false);
             bottomSection.add(logScroll, BorderLayout.WEST); bottomSection.add(menuPanel, BorderLayout.CENTER);
@@ -678,10 +684,13 @@ public class Vanguards extends JFrame {
                 JPanel wWrap = new JPanel(new BorderLayout()); wWrap.setBackground(PANEL_BG); wWrap.add(wPan, BorderLayout.NORTH);
                 JPanel aWrap = new JPanel(new BorderLayout()); aWrap.setBackground(PANEL_BG); aWrap.add(aPan, BorderLayout.NORTH);
                 JPanel rWrap = new JPanel(new BorderLayout()); rWrap.setBackground(PANEL_BG); rWrap.add(rPan, BorderLayout.NORTH);
-                
+                //scrollbarshit
                 JScrollPane wScroll = new JScrollPane(wWrap); wScroll.setPreferredSize(new Dimension(450, 160));
+                wScroll.getVerticalScrollBar().setUI(new ScrollUI(ACCENT_COL, new Color(30, 30, 35), 10, 10));
                 JScrollPane aScroll = new JScrollPane(aWrap); aScroll.setPreferredSize(new Dimension(450, 160));
+                aScroll.getVerticalScrollBar().setUI(new ScrollUI(ACCENT_COL, new Color(30, 30, 35), 10, 10));
                 JScrollPane rScroll = new JScrollPane(rWrap); rScroll.setPreferredSize(new Dimension(450, 160));
+                rScroll.getVerticalScrollBar().setUI(new ScrollUI(ACCENT_COL, new Color(30, 30, 35), 10, 10));
                 tabs.addTab("Weapons", wScroll); tabs.addTab("Armor", aScroll); tabs.addTab("Relics", rScroll);
                 
                 if(lastInventoryTab < tabs.getTabCount()) tabs.setSelectedIndex(lastInventoryTab);
