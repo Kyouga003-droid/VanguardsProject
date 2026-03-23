@@ -57,6 +57,7 @@ public class Vanguards extends JFrame {
         mainContainer = new JPanel(cards);
         
         mainContainer.add(new TitleScreen(), "TITLE");
+        mainContainer.add(new TutorialScreen(), "TUTORIAL");
         mainContainer.add(new ClassSelect(), "SELECT");
         battlePanel = new BattlePanel();
         mainContainer.add(battlePanel, "BATTLE");
@@ -115,18 +116,18 @@ public class Vanguards extends JFrame {
     }
 
     abstract class Equipment extends Item {
-        int atk, def, spd, luk;
+        int hp, atk, def, spd, luk;
         String passive = null;
-        public Equipment(String n, int p, int a, int d, int s, int l, Rarity r) {
+        public Equipment(String n, int p, int h, int a, int d, int s, int l, Rarity r) {
             super(n, p, r);
-            atk = a; def = d; spd = s; luk = l;
+            hp = h; atk = a; def = d; spd = s; luk = l;
         }
-        public String getStatsString() { return "ATK: " + atk + " | DEF: " + def + " | SPD: " + spd + " | LUK: " + luk; }
+        public String getStatsString() { return "HP: " + hp + " | ATK: " + atk + " | DEF: " + def + "<br>SPD: " + spd + " | LUK: " + luk; }
     }
 
-    class Relic extends Equipment { public Relic(String n, int p, int a, int d, int s, int l, Rarity r) { super(n, p, a, d, s, l, r); } }
-    class Weapon extends Equipment { public Weapon(String n, int p, int a, int d, int s, int l, Rarity r) { super(n, p, a, d, s, l, r); } }
-    class Armor extends Equipment { public Armor(String n, int p, int a, int d, int s, int l, Rarity r) { super(n, p, a, d, s, l, r); } }
+    class Relic extends Equipment { public Relic(String n, int p, int h, int a, int d, int s, int l, Rarity r) { super(n, p, h, a, d, s, l, r); } }
+    class Weapon extends Equipment { public Weapon(String n, int p, int h, int a, int d, int s, int l, Rarity r) { super(n, p, h, a, d, s, l, r); } }
+    class Armor extends Equipment { public Armor(String n, int p, int h, int a, int d, int s, int l, Rarity r) { super(n, p, h, a, d, s, l, r); } }
 
     static class Consumable extends Item {
         String effect;
@@ -204,16 +205,24 @@ public class Vanguards extends JFrame {
         }
 
         public int[] getBonusStats() {
-            int bA = 0, bD = 0, bS = 0, bL = 0;
-            if(equippedWeapon != null) { bA += equippedWeapon.atk; bD += equippedWeapon.def; bS += equippedWeapon.spd; bL += equippedWeapon.luk; }
-            if(equippedArmor != null) { bA += equippedArmor.atk; bD += equippedArmor.def; bS += equippedArmor.spd; bL += equippedArmor.luk; }
-            for(Relic r : equippedRelics) { bA += r.atk; bD += r.def; bS += r.spd; bL += r.luk; }
-            return new int[]{bA, bD, bS, bL};
+            int bH = 0, bA = 0, bD = 0, bS = 0, bL = 0;
+            if(equippedWeapon != null) { bH += equippedWeapon.hp; bA += equippedWeapon.atk; bD += equippedWeapon.def; bS += equippedWeapon.spd; bL += equippedWeapon.luk; }
+            if(equippedArmor != null) { bH += equippedArmor.hp; bA += equippedArmor.atk; bD += equippedArmor.def; bS += equippedArmor.spd; bL += equippedArmor.luk; }
+            for(Relic r : equippedRelics) { bH += r.hp; bA += r.atk; bD += r.def; bS += r.spd; bL += r.luk; }
+            return new int[]{bH, bA, bD, bS, bL};
+        }
+
+        public int getTotalMaxHp() {
+            return maxHp + getBonusStats()[0];
+        }
+
+        @Override public void heal(int amt) {
+            hp = Math.min(getTotalMaxHp(), hp + amt);
         }
 
         public int getExpRequirement() { return 100 + (level * level * 50); }
         
-        public double getParryChance() { return Math.min(0.25, (spd + getBonusStats()[2]) * 0.005); }
+        public double getParryChance() { return Math.min(0.25, (spd + getBonusStats()[3]) * 0.005); }
 
         public String getRankTitle() {
             if(level < 5) return "Novice";
@@ -228,7 +237,7 @@ public class Vanguards extends JFrame {
             int target = getExpRequirement();
             if(xp >= target) {
                 xp -= target;
-                level++; hp = maxHp; energy = maxEnergy; unspentStats += 3;
+                level++; hp = getTotalMaxHp(); energy = maxEnergy; unspentStats += 3;
                 log.append("\n[SYS] >> LEVEL UP! Reached Level " + level + " <<\n");
                 return true;
             }
@@ -283,8 +292,8 @@ public class Vanguards extends JFrame {
                 g.setColor(Color.GREEN); g.fillOval(px+15, py+30, 10, 10);
             }
             else if(cls == ClassType.PALADIN) {
-                g.fillRect(px, py+10, 50, 70);
-                g.setColor(Color.YELLOW); g.fillRect(px+20, py+20, 10, 50); g.fillRect(px+10, py+30, 30, 10);
+                g.fillRect(px, py, 50, 85);
+                g.setColor(Color.YELLOW); g.fillRect(px+20, py+10, 10, 50); g.fillRect(px+10, py+30, 30, 10);
             }
             else { 
                 g.fillRoundRect(px+10, py, 40, 85, 20, 20);
@@ -417,6 +426,51 @@ public class Vanguards extends JFrame {
             g.drawString(text != null ? text : (c==Color.GREEN ? "+" : "-") + val, x+2, y+2);
             g.setColor(new Color(c.getRed(), c.getGreen(), c.getBlue(), Math.max(0, life*6)));
             g.drawString(text != null ? text : (c==Color.GREEN ? "+" : "-") + val, x, y);
+        }
+    }
+
+    class TutorialScreen extends JPanel {
+        public TutorialScreen() {
+            setLayout(new BorderLayout());
+            setBackground(PANEL_BG);
+            
+            JPanel contentPanel = new JPanel();
+            contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
+            contentPanel.setOpaque(false);
+            contentPanel.setBorder(new EmptyBorder(50, 100, 50, 100));
+
+            JLabel title = new JLabel("HOW TO PLAY");
+            title.setFont(new Font("Serif", Font.BOLD, 60));
+            title.setForeground(ACCENT_COL);
+            title.setAlignmentX(Component.CENTER_ALIGNMENT);
+            contentPanel.add(title);
+            contentPanel.add(Box.createRigidArea(new Dimension(0, 40)));
+
+            String tutorialHtml = "<html><body style='width: 800px; color: #F5F5F5; font-family: SansSerif; font-size: 18px; line-height: 1.5;'>"
+                + "<b><font color='#D4AF37'>COMBAT:</font></b> Spend Energy to use abilities. String together attacks to build a Combo for extra damage. Watch out for Elite enemy modifiers!<br><br>"
+                + "<b><font color='#D4AF37'>STATS:</font></b><br>"
+                + "• <b>ATK</b> - Increases damage dealt.<br>"
+                + "• <b>DEF</b> - Reduces damage taken.<br>"
+                + "• <b>SPD</b> - Increases Evasion and Parry chances.<br>"
+                + "• <b>LUK</b> - Increases Critical Hit chance.<br><br>"
+                + "<b><font color='#D4AF37'>EQUIPMENT:</font></b> Equip Weapons, Armor, and up to 4 Relics. They provide powerful passives and bonus stats, including Max HP.<br><br>"
+                + "<b><font color='#D4AF37'>SHOP & BOUNTIES:</font></b> Slay enemies to earn Gold and complete Bounties. Use Gold in the Shop to buy gear, potions, and upgrades. The Shop refreshes every 3 battles.<br>"
+                + "</body></html>";
+                
+            JLabel desc = new JLabel(tutorialHtml);
+            desc.setAlignmentX(Component.CENTER_ALIGNMENT);
+            contentPanel.add(desc);
+            contentPanel.add(Box.createRigidArea(new Dimension(0, 60)));
+
+            StylizedButton btn = new StylizedButton("CHOOSE YOUR HERO");
+            btn.setFont(new Font("SansSerif", Font.BOLD, 24));
+            btn.setAlignmentX(Component.CENTER_ALIGNMENT);
+            btn.setPreferredSize(new Dimension(350, 60));
+            btn.setMaximumSize(new Dimension(350, 60));
+            btn.addActionListener(e -> cards.show(mainContainer, "SELECT"));
+            contentPanel.add(btn);
+
+            add(contentPanel, BorderLayout.CENTER);
         }
     }
 
@@ -637,14 +691,15 @@ public class Vanguards extends JFrame {
 
             } else if(key.equals("STATS")) {
                 int[] b = player.getBonusStats();
-                JPanel statBox = new JPanel(new GridLayout(5, 2, 10, 10)); statBox.setOpaque(false);
+                JPanel statBox = new JPanel(new GridLayout(6, 2, 10, 10)); statBox.setOpaque(false);
                 statBox.add(createStatLabel("CLASS:", player.cls.title, ACCENT_COL));
                 statBox.add(createStatLabel("LEVEL:", player.level+"", Color.WHITE));
-                statBox.add(createStatLabel("ATK:", player.atk + " (+" + b[0] + ")", Color.WHITE));
-                statBox.add(createStatLabel("DEF:", player.def + " (+" + b[1] + ")", Color.WHITE));
-                statBox.add(createStatLabel("SPD:", player.spd + " (+" + b[2] + ")", Color.WHITE));
-                statBox.add(createStatLabel("LUK:", player.luk + " (+" + b[3] + ")", Color.WHITE));
-                double dodge = Math.min(0.60, (player.spd + b[2]) * 0.012) * 100;
+                statBox.add(createStatLabel("MAX HP:", player.maxHp + " (+" + b[0] + ")", Color.WHITE));
+                statBox.add(createStatLabel("ATK:", player.atk + " (+" + b[1] + ")", Color.WHITE));
+                statBox.add(createStatLabel("DEF:", player.def + " (+" + b[2] + ")", Color.WHITE));
+                statBox.add(createStatLabel("SPD:", player.spd + " (+" + b[3] + ")", Color.WHITE));
+                statBox.add(createStatLabel("LUK:", player.luk + " (+" + b[4] + ")", Color.WHITE));
+                double dodge = Math.min(0.60, (player.spd + b[3]) * 0.012) * 100;
                 statBox.add(createStatLabel("EVASION:", String.format("%.1f%%", dodge), Color.CYAN));
                 double parry = player.getParryChance() * 100;
                 statBox.add(createStatLabel("PARRY CHANCE:", String.format("%.1f%%", parry), Color.YELLOW));
@@ -676,12 +731,12 @@ public class Vanguards extends JFrame {
             c.setBorder(BorderFactory.createLineBorder(eq.rarity.col, 2));
             c.setBackground(new Color(25,25,30));
             
-            JLabel n = new JLabel((isEq?"[E] ":"") + eq.name);
+            JLabel n = new JLabel("<html>" + (isEq?"<b>[E]</b> ":"") + eq.name + "</html>");
             n.setForeground(eq.rarity.col);
             n.setFont(new Font("SansSerif", Font.BOLD, 12));
             n.setBorder(new EmptyBorder(5, 5, 0, 5));
             
-            JLabel s = new JLabel("<html>ATK:"+eq.atk+" DEF:"+eq.def+"<br>SPD:"+eq.spd+" LUK:"+eq.luk+"<br>"+(eq.passive!=null?eq.passive:"")+"</html>");
+            JLabel s = new JLabel("<html>"+eq.getStatsString()+"<br>"+(eq.passive!=null?eq.passive:"")+"</html>");
             s.setForeground(Color.LIGHT_GRAY);
             s.setFont(new Font("SansSerif", Font.PLAIN, 10));
             s.setBorder(new EmptyBorder(5, 5, 5, 5));
@@ -805,7 +860,7 @@ public class Vanguards extends JFrame {
             p.animTick = 0;
             p.onAnimComplete = () -> {
                 int[] b = p.getBonusStats();
-                boolean isCrit = Math.random() < ((p.luk + b[3]) * 0.015);
+                boolean isCrit = Math.random() < ((p.luk + b[4]) * 0.015);
                 double comboMult = 1.0 + (p.combo * 0.05);
                 int baseDmg = calculateBaseDamage(move, p, b);
                 
@@ -856,10 +911,10 @@ public class Vanguards extends JFrame {
         }
 
         private int calculateBaseDamage(String m, Player p, int[] b) {
-            int tAtk = p.atk + b[0], tDef = p.def + b[1], tSpd = p.spd + b[2], tLuk = p.luk + b[3];
+            int tAtk = p.atk + b[1], tDef = p.def + b[2], tSpd = p.spd + b[3], tLuk = p.luk + b[4];
             if(m.contains("Basic")) return tAtk; 
             if(m.contains("Shield Bash")) return (int)(tDef * 1.8);
-            if(m.contains("Aegis Crush")) return (int)(tDef * 2.5 + p.maxHp * 0.1);
+            if(m.contains("Aegis Crush")) return (int)(tDef * 2.5 + p.getTotalMaxHp() * 0.1);
             if(m.contains("Phalanx")) return (int)(tDef * 1.5);
             if(m.contains("Fireball")) return (int)(tAtk * 2.0);
             if(m.contains("Void Storm")) return (int)(tAtk * 3.0); 
@@ -870,7 +925,7 @@ public class Vanguards extends JFrame {
             if(m.contains("Piercing Arrow")) return (int)(tSpd * 1.5 + tAtk);
             if(m.contains("Volley")) return (int)(tSpd * 2.0 + tLuk);
             if(m.contains("Snipe")) return (int)((tSpd + tAtk) * 2.5);
-            if(m.contains("Holy Strike")) return (int)(tAtk * 1.5 + p.maxHp * 0.05);
+            if(m.contains("Holy Strike")) return (int)(tAtk * 1.5 + p.getTotalMaxHp() * 0.05);
             if(m.contains("Divine Favor")) return (int)(tAtk * 1.2 + tDef);
             if(m.contains("Smite")) return (int)(tAtk * 2.0 + tDef * 1.5);
             return tAtk;
@@ -879,7 +934,7 @@ public class Vanguards extends JFrame {
         private void executeDefend() {
             Player p = state.player;
             p.combo = 0; 
-            int bDef = p.def + p.getBonusStats()[1];
+            int bDef = p.def + p.getBonusStats()[2];
             p.shield += bDef * 2 + 50;
             if(p.equippedArmor != null && "Knight's Resolve".equals(p.equippedArmor.passive)) p.shield += 100;
             log.append("[COMBAT] >> Guarding! Shield is now " + p.shield + ".\n");
@@ -893,7 +948,7 @@ public class Vanguards extends JFrame {
             if(p.gold < 10) { log.append("[SYS] >> Not enough gold to camp! (10G required)\n"); return; }
             p.combo = 0; p.gold -= 10;
             p.energy = Math.min(p.maxEnergy, p.energy + 50);
-            p.heal((int)(p.maxHp * 0.1));
+            p.heal((int)(p.getTotalMaxHp() * 0.1));
             log.append("[COMBAT] >> Camped! Gained 50 Energy & 10% HP for 10 Gold.\n");
             buildSideShop();
             inputLocked = true; setMenu("EMPTY");
@@ -927,7 +982,7 @@ public class Vanguards extends JFrame {
                 if(p.activeBuffTurns == 0) log.append("[COMBAT] >> Damage Buff expired.\n");
             }
             for(Relic r : p.equippedRelics) {
-                if("Regeneration".equals(r.passive)) p.heal((int)(p.maxHp * 0.05));
+                if("Regeneration".equals(r.passive)) p.heal((int)(p.getTotalMaxHp() * 0.05));
                 if("Titan Shield".equals(r.passive)) p.shield += 15;
             }
             
@@ -1020,11 +1075,11 @@ public class Vanguards extends JFrame {
 
             enemy.turnCounter++;
             int[] b = p.getBonusStats();
-            double dodgeChance = Math.min(0.60, (p.spd + b[2]) * 0.012);
+            double dodgeChance = Math.min(0.60, (p.spd + b[3]) * 0.012);
             if(Math.random() < dodgeChance) {
                 log.append("[COMBAT] >> You DODGED the attack!\n");
                 dmgNums.add(new DamageNumber(0, 280, 280, Color.CYAN, "DODGE"));
-                int counterDmg = (p.spd + b[2]) * 2; enemy.takeDamage(counterDmg);
+                int counterDmg = (p.spd + b[3]) * 2; enemy.takeDamage(counterDmg);
                 log.append("[COMBAT] >> Counter-attacked for " + counterDmg + " damage!\n");
                 dmgNums.add(new DamageNumber(counterDmg, 780, 300, Color.WHITE));
                 
@@ -1043,7 +1098,7 @@ public class Vanguards extends JFrame {
                 } else {
                     double bossEnrageMult = (enemy.isBoss && enemy.turnCounter > 8) ? 1.5 : 1.0;
                     double weaknessMult = (enemy.weakTurns > 0) ? 0.6 : 1.0;
-                    int ed = (int)((enemy.atk * bossEnrageMult * weaknessMult) - (p.def + b[1])/2);
+                    int ed = (int)((enemy.atk * bossEnrageMult * weaknessMult) - (p.def + b[2])/2);
                     if(enemy.isBoss && enemy.turnCounter % 4 == 0) { ed *= 2.5; log.append("[COMBAT] >> OVERLORD USES DEVASTATING STRIKE!\n"); screenShake = 20; }
                     
                     ed = Math.max(5, ed);
@@ -1090,17 +1145,17 @@ public class Vanguards extends JFrame {
             
             if(typeRoll == 0) {
                 String pass = rarity == Rarity.GODLY ? GODLY_PASSIVES[rnd.nextInt(GODLY_PASSIVES.length)] : (rarity == Rarity.MYTHIC ? MYTHIC_PASSIVES[rnd.nextInt(MYTHIC_PASSIVES.length)] : null);
-                Relic r = new Relic(rarity.name + " " + RELIC_NAMES[rnd.nextInt(RELIC_NAMES.length)], calcPrice, b*m, b*m, (b/2)*m, (b/2)*m, rarity);
+                Relic r = new Relic(rarity.name + " " + RELIC_NAMES[rnd.nextInt(RELIC_NAMES.length)], calcPrice, b*m*5, b*m, b*m, (b/2)*m, (b/2)*m, rarity);
                 r.passive = pass; return r;
             } else if(typeRoll == 1) {
                 String name = WEAPON_PREFIXES[rnd.nextInt(WEAPON_PREFIXES.length)] + " " + WEAPON_NOUNS[rnd.nextInt(WEAPON_NOUNS.length)];
                 String pass = rarity.multiplier >= 3.0 ? WEAPON_PASSIVES[rnd.nextInt(WEAPON_PASSIVES.length)] : null;
-                Weapon w = new Weapon(name, calcPrice, (b*2)*m, (b/3)*m, b*m, b*m, rarity);
+                Weapon w = new Weapon(name, calcPrice, b*m*2, (b*2)*m, (b/3)*m, b*m, b*m, rarity);
                 w.passive = pass; return w;
             } else {
                 String name = ARMOR_PREFIXES[rnd.nextInt(ARMOR_PREFIXES.length)] + " " + ARMOR_NOUNS[rnd.nextInt(ARMOR_NOUNS.length)];
                 String pass = rarity.multiplier >= 5.5 ? "Knight's Resolve" : null;
-                Armor a = new Armor(name, calcPrice, (b/3)*m, (b*2)*m, (b/2)*m, b*m, rarity);
+                Armor a = new Armor(name, calcPrice, b*m*10, (b/3)*m, (b*2)*m, (b/2)*m, b*m, rarity);
                 a.passive = pass; return a;
             }
         }
@@ -1141,10 +1196,10 @@ public class Vanguards extends JFrame {
             
             if(enemy != null && enemy.isBoss) drawBar(g, 150, 40, "OVERLORD", enemy.displayHp, enemy.maxHp, new Color(180, 20, 20), 650, 25);
             state.player.render(g, 200, 250, tick); if(enemy != null && enemy.hp > 0) enemy.render(g, 650, 250, tick);
-            double hpPct = state.player.displayHp / state.player.maxHp; 
+            double hpPct = state.player.displayHp / state.player.getTotalMaxHp(); 
             Color hpCol = hpPct > 0.5 ? new Color(40, 200, 80) : hpPct > 0.2 ? Color.YELLOW : Color.RED;
-            drawBar(g, 100, 380, "HP", state.player.displayHp, state.player.maxHp, hpCol, 300, 15);
-            drawBar(g, 100, 405, "SHIELD", state.player.shield, Math.max(state.player.maxHp, state.player.shield), SHIELD_CYAN, 300, 15);
+            drawBar(g, 100, 380, "HP", state.player.displayHp, state.player.getTotalMaxHp(), hpCol, 300, 15);
+            drawBar(g, 100, 405, "SHIELD", state.player.shield, Math.max(state.player.getTotalMaxHp(), state.player.shield), SHIELD_CYAN, 300, 15);
             drawBar(g, 100, 430, "XP", state.player.displayXp, state.player.getExpRequirement(), XP_ORANGE, 300, 15);
             drawBar(g, 100, 455, "ENERGY", state.player.displayEnergy, state.player.maxEnergy, ENERGY_BLUE, 300, 15);
             if(enemy != null && enemy.hp > 0 && !enemy.isBoss) drawBar(g, 550, 400, enemy.name, enemy.displayHp, enemy.maxHp, enemy.color, 300, 15);
@@ -1187,7 +1242,7 @@ public class Vanguards extends JFrame {
             setLayout(null);
             StylizedButton s = new StylizedButton("ENTER THE RIFT"); s.setBounds(500, 600, 350, 80);
             s.setFont(new Font("SansSerif", Font.BOLD, 24));
-            s.addActionListener(e -> cards.show(mainContainer, "SELECT")); add(s);
+            s.addActionListener(e -> cards.show(mainContainer, "TUTORIAL")); add(s);
             new Timer(30, e -> { tick++; repaint(); }).start();
         }
         protected void paintComponent(Graphics g) {
@@ -1276,12 +1331,28 @@ public class Vanguards extends JFrame {
     class ClassSelect extends JPanel {
         public ClassSelect() {
             setBackground(new Color(15, 15, 20));
-            setLayout(new FlowLayout(FlowLayout.CENTER, 50, 350));
+            setLayout(new FlowLayout(FlowLayout.CENTER, 30, 380));
             for(ClassType ct : ClassType.values()) {
-                StylizedButton b = new StylizedButton("<html><center>" + ct.title + "<br><font size='3' color='gray'>" + ct.scaleDesc + "</font></center></html>");
-                b.setPreferredSize(new Dimension(220, 100));
+                ClassButton b = new ClassButton("<html><center>" + ct.title + "<br><font size='3' color='gray'>" + ct.scaleDesc + "</font></center></html>", ct.color);
+                b.setPreferredSize(new Dimension(210, 100));
                 b.addActionListener(e -> { state.player = new Player(ct); ACCENT_COL = ct.color; battlePanel.initSession(); cards.show(mainContainer, "BATTLE"); }); add(b);
             }
+        }
+    }
+
+    class ClassButton extends StylizedButton {
+        private Color classColor;
+        public ClassButton(String text, Color classColor) {
+            super(text);
+            this.classColor = classColor;
+        }
+        @Override protected void paintBorder(Graphics g) { 
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON); 
+            g2.setStroke(new BasicStroke(3));
+            g2.setColor(classColor);
+            g2.drawRoundRect(1, 1, getWidth() - 3, getHeight() - 3, 10, 10);
+            g2.dispose();
         }
     }
 
