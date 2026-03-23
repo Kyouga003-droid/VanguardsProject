@@ -5,11 +5,11 @@ import java.awt.event.*;
 import java.awt.geom.*;
 import java.util.*;
 import java.util.List;
+import java.util.function.Supplier;
 import javax.swing.Timer;
 
 public class Vanguards extends JFrame {
     
-    // UI & THEME CONSTANTS
     private static final Color PANEL_BG = new Color(28, 28, 38);
     private static final Color TEXT_LIGHT = new Color(245, 245, 245);
     private static final Color XP_ORANGE = new Color(255, 170, 0);
@@ -23,12 +23,12 @@ public class Vanguards extends JFrame {
         new Color(10, 20, 40), new Color(35, 25, 10), new Color(25, 10, 35), new Color(20, 30, 35)
     };
     
-    // PROCEDURAL GENERATION ARRAYS
     private static final String[] WEAPON_PREFIXES = {"Flaming", "Freezing", "Venomous", "Divine", "Cursed", "Gilded", "Rusty", "Phantom", "Astral", "Savage", "Demonic", "Celestial", "Void", "Bloodthirst", "Ethereal"};
     private static final String[] WEAPON_NOUNS = {"Greatsword", "Staff", "Dagger", "Halberd", "Scythe", "Longbow", "Warhammer", "Katana", "Grimoire", "Whip"};
     private static final String[] ARMOR_PREFIXES = {"Sturdy", "Ethereal", "Spiked", "Heavy", "Lightweight", "Ancient", "Mythril", "Obsidian", "Silk", "Dragonbone", "Titanium", "Shadow", "Crystal"};
     private static final String[] ARMOR_NOUNS = {"Plate", "Robes", "Vest", "Armor", "Mantle", "Cuirass", "Cloak", "Tunic", "Carapace"};
     private static final String[] RELIC_NAMES = {"Sunblade", "Ogre Gauntlets", "Giant Belt", "Cloak of Shadows", "Amulet of Vitality", "Archmagi Robes", "Vorpal Shard", "Archer's Bracers", "Ring of Aegis", "Power Staff", "Eye of the Void", "Demon Horn", "Angel Wing"};
+    
     private static final String[] MYTHIC_PASSIVES = {"Vampirism", "Regeneration", "Titan Shield", "Thorns"};
     private static final String[] GODLY_PASSIVES = {"Omnipotence", "Immortality Core", "Time Weaver", "Soul Syphon"};
     private static final String[] WEAPON_PASSIVES = {"Sorcerer's Echo", "Operator's Precision", "Knight's Resolve", "Shatter", "Swift Strike", "Lifesteal"};
@@ -39,10 +39,10 @@ public class Vanguards extends JFrame {
     private BattlePanel battlePanel;
     private DeathScreen deathScreen;
     private List<Particle> particles = new ArrayList<>();
+    
     private int screenShake = 0;
     private int maxComboAchieved = 0;
     private int rerollCost = 50;
-    // Dynamic shop cost
 
     public Vanguards() {
         setTitle("Vanguards: World's Greatest Heroes");
@@ -70,8 +70,10 @@ public class Vanguards extends JFrame {
     enum ClassType {
         KNIGHT("Knight", "Scales with: MAX HP & DEF", new Color(40, 70, 130), new Color(15, 25, 45)),
         SORCERER("Sorcerer", "Scales with: ATK & LUCK", new Color(100, 30, 150), new Color(30, 10, 45)),
-        OPERATOR("Operator", "Scales with: ATK & SPD", new Color(160, 20, 30), new Color(40, 10, 15));
-        
+        OPERATOR("Operator", "Scales with: ATK & SPD", new Color(160, 20, 30), new Color(40, 10, 15)),
+        RANGER("Ranger", "Scales with: SPD & LUK", new Color(30, 120, 50), new Color(10, 30, 15)),
+        PALADIN("Paladin", "Scales with: HP & ATK", new Color(200, 150, 20), new Color(45, 35, 10));
+
         String title, scaleDesc; Color color, darkBg;
         ClassType(String t, String desc, Color c, Color bg) { 
             title = t;
@@ -102,7 +104,7 @@ public class Vanguards extends JFrame {
     }
 
     enum EliteModifier {
-        NONE(""), ARMORED("[Armored]"), VAMPIRIC("[Vampiric]"), SWIFT("[Swift]"), TOXIC("[Toxic]");
+        NONE(""), ARMORED("[Armored]"), VAMPIRIC("[Vampiric]"), SWIFT("[Swift]"), TOXIC("[Toxic]"), CORRUPTED("[Corrupted]");
         String tag; EliteModifier(String t) { tag = t; }
     }
 
@@ -137,8 +139,6 @@ public class Vanguards extends JFrame {
         int shield = 0, burnTurns = 0, poisonTurns = 0, weakTurns = 0, vulnTurns = 0;
         boolean stunned = false;
         double displayHp, displayEnergy = 0, displayXp = 0; int hitFlash = 0;
-        
-        // Animation Variables
         int animX = 0, animY = 0, animTick = 0;
         String currentAnim = "NONE"; 
         Runnable onAnimComplete = null;
@@ -187,6 +187,7 @@ public class Vanguards extends JFrame {
         int xp = 0, energy = 50, maxEnergy = 100, gold = 50, unspentStats = 0, combo = 0;
         int healPots = 3, greaterPots = 1, dmgBuffs = 1, activeBuffTurns = 0, thornsTurns = 0;
         int winStreak = 0, fleePenalty = 10;
+        boolean hasPet = false;
         Weapon equippedWeapon = null; Armor equippedArmor = null;
         List<Relic> equippedRelics = new ArrayList<>();
         List<Item> inventory = new ArrayList<>();
@@ -197,6 +198,8 @@ public class Vanguards extends JFrame {
             if(c == ClassType.KNIGHT) { maxHp = hp = 450; def = 35; }
             if(c == ClassType.SORCERER) { luk = 30; atk = 40; maxHp = hp = 220; }
             if(c == ClassType.OPERATOR) { spd = 30; atk = 35; maxHp = hp = 260; }
+            if(c == ClassType.RANGER) { spd = 40; luk = 20; maxHp = hp = 240; atk = 30; def = 15; }
+            if(c == ClassType.PALADIN) { maxHp = hp = 350; def = 25; atk = 35; spd = 5; luk = 5; }
             displayEnergy = energy;
         }
 
@@ -209,6 +212,17 @@ public class Vanguards extends JFrame {
         }
 
         public int getExpRequirement() { return 100 + (level * level * 50); }
+        
+        public double getParryChance() { return Math.min(0.25, (spd + getBonusStats()[2]) * 0.005); }
+
+        public String getRankTitle() {
+            if(level < 5) return "Novice";
+            if(level < 10) return "Adept";
+            if(level < 15) return "Expert";
+            if(level < 20) return "Master";
+            if(level < 25) return "Grandmaster";
+            return "Vanguard";
+        }
 
         public boolean checkLevelUp(JTextArea log) {
             int target = getExpRequirement();
@@ -264,17 +278,34 @@ public class Vanguards extends JFrame {
                 g.fillPolygon(new int[]{px+30, px-15, px+75}, new int[]{py, py+85, py+85}, 3);
                 g.setColor(new Color(0, 255, 255)); g.fillOval(px+58, py-25, 20, 20); 
             } 
+            else if(cls == ClassType.RANGER) {
+                g.fillPolygon(new int[]{px, px+20, px+40}, new int[]{py+80, py, py+80}, 3);
+                g.setColor(Color.GREEN); g.fillOval(px+15, py+30, 10, 10);
+            }
+            else if(cls == ClassType.PALADIN) {
+                g.fillRect(px, py+10, 50, 70);
+                g.setColor(Color.YELLOW); g.fillRect(px+20, py+20, 10, 50); g.fillRect(px+10, py+30, 30, 10);
+            }
             else { 
                 g.fillRoundRect(px+10, py, 40, 85, 20, 20);
                 g.setColor(Color.DARK_GRAY); g.fillArc(px+5, py-5, 50, 45, 0, 180); 
             }
             
+            if(hasPet) {
+                g.setColor(Color.CYAN);
+                int petX = px - 40 + (int)(Math.sin(tick*0.1)*10);
+                int petY = py + 20 + (int)(Math.cos(tick*0.15)*10);
+                g.fillOval(petX, petY, 15, 15);
+            }
+            
+            g.setFont(new Font("SansSerif", Font.BOLD, 12));
+            g.setColor(Color.LIGHT_GRAY);
+            g.drawString("<" + getRankTitle() + ">", px - 10, py - 35);
+
             int textY = py - 15;
             g.setFont(new Font("Impact", Font.PLAIN, 14));
             if(activeBuffTurns > 0) { g.setColor(Color.CYAN); g.drawString("ATK UP (" + activeBuffTurns + ")", px, textY); textY -= 15; }
-            if(thornsTurns > 0) { g.setColor(Color.PINK);
-                g.drawString("THORNS (" + thornsTurns + ")", px, textY); textY -= 15;
-            }
+            if(thornsTurns > 0) { g.setColor(Color.PINK); g.drawString("THORNS (" + thornsTurns + ")", px, textY); textY -= 15; }
         }
     }
 
@@ -288,8 +319,8 @@ public class Vanguards extends JFrame {
             this.archetype = types[new Random().nextInt(types.length)];
             this.color = boss ? new Color(180, 20, 20) : archetype.typeColor;
             
-            if(!boss && Math.random() < 0.25) {
-                EliteModifier[] mods = {EliteModifier.ARMORED, EliteModifier.VAMPIRIC, EliteModifier.SWIFT, EliteModifier.TOXIC};
+            if(!boss && Math.random() < 0.3) {
+                EliteModifier[] mods = {EliteModifier.ARMORED, EliteModifier.VAMPIRIC, EliteModifier.SWIFT, EliteModifier.TOXIC, EliteModifier.CORRUPTED};
                 this.elite = mods[new Random().nextInt(mods.length)];
             }
             if(!boss) this.name = elite.tag + " " + archetype.typeName + " " + n;
@@ -306,6 +337,7 @@ public class Vanguards extends JFrame {
             
             if(elite == EliteModifier.ARMORED) baseDEF *= 2.0;
             if(elite == EliteModifier.SWIFT) baseSPD *= 2.5;
+            if(elite == EliteModifier.CORRUPTED) { baseHP *= 2.5; baseATK *= 1.8; this.color = Color.MAGENTA; }
 
             this.maxHp = this.hp = baseHP; this.atk = baseATK; this.def = baseDEF; this.spd = baseSPD;
             this.luk = 2; this.displayHp = this.hp;
@@ -337,28 +369,20 @@ public class Vanguards extends JFrame {
                 g.setColor(Color.RED); g.fillOval(px+40, py+70, 20, 20);
             } else {
                 if(archetype == EnemyType.TANK) { g.fillRoundRect(px, py, 70, 70, 10, 10); } 
-                else if(archetype == EnemyType.ASSASSIN) { Polygon p = new Polygon(new int[]{px+35, px+70, px}, new int[]{py, py+70, py+70}, 3);
-                    g.fillPolygon(p); } 
-                else { Polygon minion = new Polygon(new int[]{px+35, px+70, px+35, px}, new int[]{py, py+35, py+70, py+35}, 4);
-                    g.fillPolygon(minion); }
-                g.setColor(Color.BLACK);
-                g.fillOval(px+20, py+20, 30, 30); 
+                else if(archetype == EnemyType.ASSASSIN) { Polygon p = new Polygon(new int[]{px+35, px+70, px}, new int[]{py, py+70, py+70}, 3); g.fillPolygon(p); } 
+                else { Polygon minion = new Polygon(new int[]{px+35, px+70, px+35, px}, new int[]{py, py+35, py+70, py+35}, 4); g.fillPolygon(minion); }
+                g.setColor(Color.BLACK); g.fillOval(px+20, py+20, 30, 30); 
                 g.setColor(Color.RED); g.fillOval(px+30, py+30, 10, 10);
             }
             
             int textY = py - 20;
             g.setFont(new Font("Impact", Font.PLAIN, 16));
             if(stunned) { g.setColor(Color.YELLOW); g.drawString("*STUNNED*", px, textY); textY -= 20; }
-            if(burnTurns > 0) { g.setColor(Color.ORANGE);
-                g.drawString("BURN (" + burnTurns + ")", px, textY); textY -= 20;}
-            if(poisonTurns > 0) { g.setColor(Color.GREEN);
-                g.drawString("POISON (" + poisonTurns + ")", px, textY); textY -= 20;}
-            if(weakTurns > 0) { g.setColor(Color.LIGHT_GRAY);
-                g.drawString("WEAK (" + weakTurns + ")", px, textY); textY -= 20;}
-            if(vulnTurns > 0) { g.setColor(Color.MAGENTA);
-                g.drawString("VULN (" + vulnTurns + ")", px, textY); textY -= 20;}
-            if(isBoss && turnCounter > 8) { g.setColor(Color.RED);
-                g.drawString("ENRAGED!", px, textY); }
+            if(burnTurns > 0) { g.setColor(Color.ORANGE); g.drawString("BURN (" + burnTurns + ")", px, textY); textY -= 20;}
+            if(poisonTurns > 0) { g.setColor(Color.GREEN); g.drawString("POISON (" + poisonTurns + ")", px, textY); textY -= 20;}
+            if(weakTurns > 0) { g.setColor(Color.LIGHT_GRAY); g.drawString("WEAK (" + weakTurns + ")", px, textY); textY -= 20;}
+            if(vulnTurns > 0) { g.setColor(Color.MAGENTA); g.drawString("VULN (" + vulnTurns + ")", px, textY); textY -= 20;}
+            if(isBoss && turnCounter > 8) { g.setColor(Color.RED); g.drawString("ENRAGED!", px, textY); }
         }
     }
 
@@ -406,9 +430,11 @@ public class Vanguards extends JFrame {
         private List<DamageNumber> dmgNums = new ArrayList<>();
         private List<Item> shopStock = new ArrayList<>();
         private int encountersUntilRefresh = 3; private Timer gameLoop;
-        private boolean autoSellCommon = false, autoSellRare = false, autoSellEpic = false, sellMode = false;
+        private boolean autoSellCommon = false, autoSellRare = false, autoSellEpic = false;
         private boolean inputLocked = false;
-        
+        private int lastInventoryTab = 0;
+        private String currentMenuKey = "MAIN";
+
         public BattlePanel() {
             setLayout(new BorderLayout());
             setBackground(TERRAIN_COLORS[0]);
@@ -446,6 +472,9 @@ public class Vanguards extends JFrame {
 
         public void initSession() {
             state.encounters = 1;
+            state.bountyKills = 0;
+            state.bountyTarget = 3;
+            state.bountyReward = 100;
             maxComboAchieved = 0; inputLocked = false; rerollCost = 50;
             setupMenus(); spawnEnemy(); refreshShop();
             log.setText("[SYS] --- THE RIFT AWAKENS ---\n");
@@ -461,7 +490,6 @@ public class Vanguards extends JFrame {
             mainWrapper.setOpaque(false);
             subMenus.put("MAIN", mainWrapper);
             menuPanel.add(mainWrapper, "MAIN");
-
             String[] pages = {"ATTACKS", "INVENTORY", "ITEMS", "STATS", "LEVEL_UP", "EQUIPMENT_DASH", "EMPTY"};
             for(String s : pages) { 
                 JPanel sub = new JPanel(new BorderLayout());
@@ -494,15 +522,22 @@ public class Vanguards extends JFrame {
             
             JPanel quickBar = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 5));
             quickBar.setOpaque(false);
-            addConsumableBtn(quickBar, "Minor Potion", state.player.healPots, e -> { if(!inputLocked) { state.player.heal(150); state.player.healPots--; log.append("[COMBAT] >> Healed 150 HP\n"); dmgNums.add(new DamageNumber(150, 280, 280, Color.GREEN)); endPlayerTurn(); }});
-            addConsumableBtn(quickBar, "Greater Potion", state.player.greaterPots, e -> { if(!inputLocked) { state.player.heal(350); state.player.greaterPots--; log.append("[COMBAT] >> Healed 350 HP\n"); dmgNums.add(new DamageNumber(350, 280, 280, Color.GREEN)); endPlayerTurn(); }});
-            addConsumableBtn(quickBar, "Damage Buff", state.player.dmgBuffs, e -> { if(!inputLocked) { state.player.activeBuffTurns += 3; state.player.dmgBuffs--; log.append("[COMBAT] >> DMG +50% for 3 turns!\n"); endPlayerTurn(); }});
+            addConsumableBtn(quickBar, "Minor Potion", () -> state.player.healPots, e -> { 
+                state.player.heal(150); state.player.healPots--; log.append("[COMBAT] >> Healed 150 HP\n"); dmgNums.add(new DamageNumber(150, 280, 280, Color.GREEN)); endPlayerTurn(); 
+            });
+            addConsumableBtn(quickBar, "Greater Potion", () -> state.player.greaterPots, e -> { 
+                state.player.heal(350); state.player.greaterPots--; log.append("[COMBAT] >> Healed 350 HP\n"); dmgNums.add(new DamageNumber(350, 280, 280, Color.GREEN)); endPlayerTurn(); 
+            });
+            addConsumableBtn(quickBar, "Damage Buff", () -> state.player.dmgBuffs, e -> { 
+                state.player.activeBuffTurns += 3; state.player.dmgBuffs--; log.append("[COMBAT] >> DMG Buff applied for 3 turns!\n"); endPlayerTurn(); 
+            });
             p.add(grid, BorderLayout.CENTER);
             p.add(quickBar, BorderLayout.SOUTH);
             return p;
         }
 
         public void setMenu(String key) { 
+            currentMenuKey = key;
             if(key.equals("MAIN")) { 
                 JPanel mainP = subMenus.get("MAIN");
                 mainP.removeAll();
@@ -532,10 +567,20 @@ public class Vanguards extends JFrame {
                     if(player.level >= 3) moves.add("Void Storm (40 EN)"); 
                     if(player.level >= 5) moves.add("Curse of Weakness (30 EN) [WEAK]");
                 } 
-                else { 
+                else if(player.cls == ClassType.OPERATOR) { 
                     moves.add("Backstab (15 EN)");
                     if(player.level >= 3) moves.add("Execution (35 EN) [HEAL]"); 
                     if(player.level >= 5) moves.add("Toxic Dart (20 EN) [POISON]");
+                }
+                else if(player.cls == ClassType.RANGER) {
+                    moves.add("Piercing Arrow (15 EN)");
+                    if(player.level >= 3) moves.add("Volley (35 EN) [WEAK]");
+                    if(player.level >= 5) moves.add("Snipe (40 EN)");
+                }
+                else if(player.cls == ClassType.PALADIN) {
+                    moves.add("Holy Strike (15 EN)");
+                    if(player.level >= 3) moves.add("Divine Favor (30 EN) [HEAL]");
+                    if(player.level >= 5) moves.add("Smite (40 EN) [BURN]");
                 }
                 
                 for(String m : moves) {
@@ -548,72 +593,51 @@ public class Vanguards extends JFrame {
                 dash.setOpaque(false); dash.setPreferredSize(new Dimension(480, 260));
                 
                 JPanel filters = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0)); filters.setOpaque(false);
-                JCheckBox chkCom = new JCheckBox("Sell Com"); chkCom.setForeground(Color.WHITE);
+                JCheckBox chkCom = new JCheckBox("Auto-Sell Com"); chkCom.setForeground(Color.WHITE);
                 chkCom.setOpaque(false); chkCom.setSelected(autoSellCommon);
                 chkCom.addActionListener(e -> autoSellCommon = chkCom.isSelected());
-                JCheckBox chkRar = new JCheckBox("Sell Rare"); chkRar.setForeground(Color.WHITE); chkRar.setOpaque(false); chkRar.setSelected(autoSellRare);
+                JCheckBox chkRar = new JCheckBox("Auto-Sell Rare"); chkRar.setForeground(Color.WHITE); chkRar.setOpaque(false); chkRar.setSelected(autoSellRare);
                 chkRar.addActionListener(e -> autoSellRare = chkRar.isSelected());
-                JCheckBox chkEpi = new JCheckBox("Sell Epic"); chkEpi.setForeground(Color.WHITE); chkEpi.setOpaque(false); chkEpi.setSelected(autoSellEpic);
+                JCheckBox chkEpi = new JCheckBox("Auto-Sell Epic"); chkEpi.setForeground(Color.WHITE); chkEpi.setOpaque(false); chkEpi.setSelected(autoSellEpic);
                 chkEpi.addActionListener(e -> autoSellEpic = chkEpi.isSelected());
-                JToggleButton tglSell = new JToggleButton(sellMode ? "CLICK TO SELL" : "CLICK TO EQUIP");
-                tglSell.setSelected(sellMode);
-                tglSell.setBackground(sellMode ? new Color(150, 50, 50) : new Color(50, 150, 50));
-                tglSell.setForeground(Color.WHITE);
-                tglSell.addActionListener(e -> { sellMode = tglSell.isSelected(); setMenu("EQUIPMENT_DASH"); });
-                filters.add(chkCom); filters.add(chkRar); filters.add(chkEpi); filters.add(tglSell);
+                filters.add(chkCom); filters.add(chkRar); filters.add(chkEpi);
                 dash.add(filters, BorderLayout.NORTH);
                 
                 JTabbedPane tabs = new JTabbedPane();
-                JPanel wPan = new JPanel(new FlowLayout(FlowLayout.LEFT)); wPan.setBackground(PANEL_BG);
-                JPanel aPan = new JPanel(new FlowLayout(FlowLayout.LEFT)); aPan.setBackground(PANEL_BG);
-                JPanel rPan = new JPanel(new FlowLayout(FlowLayout.LEFT)); rPan.setBackground(PANEL_BG);
+                tabs.addChangeListener(e -> lastInventoryTab = tabs.getSelectedIndex());
+                
+                JPanel wPan = new JPanel(new GridLayout(0, 2, 10, 10)); wPan.setBackground(PANEL_BG);
+                JPanel aPan = new JPanel(new GridLayout(0, 2, 10, 10)); aPan.setBackground(PANEL_BG);
+                JPanel rPan = new JPanel(new GridLayout(0, 2, 10, 10)); rPan.setBackground(PANEL_BG);
+                
                 for(Item it : player.inventory) {
                     if(it instanceof Equipment) {
                         Equipment eq = (Equipment)it;
                         boolean isEquipped = player.equippedRelics.contains(eq) || player.equippedWeapon == eq || player.equippedArmor == eq;
-                        String prefix = isEquipped ? "[E] " : "";
-                        StylizedButton b = new StylizedButton(prefix + eq.name);
-                        b.setForeground(eq.rarity.col);
-                        b.setToolTipText("<html>" + eq.getStatsString() + "<br>Passive: " + (eq.passive!=null?eq.passive:"None") + "<br>Value: " + eq.rarity.sellValue + "G</html>");
-                        b.addActionListener(e -> {
-                            if(sellMode) {
-                                if(isEquipped) { log.append("[SYS] Cannot sell equipped item!\n"); return; }
-                                player.inventory.remove(eq); player.gold += eq.rarity.sellValue;
-                                log.append("[SYS] Sold " + eq.name + " for " + eq.rarity.sellValue + "G.\n");
-                                setMenu("EQUIPMENT_DASH"); buildSideShop();
-                            } else {
-                                if(isEquipped) {
-                                    if(eq instanceof Relic) player.equippedRelics.remove(eq);
-                                    else if(eq instanceof Weapon) player.equippedWeapon = null;
-                                    else if(eq instanceof Armor) player.equippedArmor = null;
-                                } else {
-                                    if(eq instanceof Relic) {
-                                        if (player.equippedRelics.size() < 4) player.equippedRelics.add((Relic)eq);
-                                        else log.append("[SYS] Relic slots full! Un-equip one first.\n");
-                                    }
-                                    else if(eq instanceof Weapon) player.equippedWeapon = (Weapon)eq;
-                                    else if(eq instanceof Armor) player.equippedArmor = (Armor)eq;
-                                }
-                                setMenu("EQUIPMENT_DASH");
-                            }
-                        });
-                        if(eq instanceof Weapon) wPan.add(b);
-                        else if(eq instanceof Armor) aPan.add(b);
-                        else if(eq instanceof Relic) rPan.add(b);
+                        JPanel card = createItemCard(eq, isEquipped, player);
+                        if(eq instanceof Weapon) wPan.add(card);
+                        else if(eq instanceof Armor) aPan.add(card);
+                        else if(eq instanceof Relic) rPan.add(card);
                     }
                 }
                 
-                JScrollPane wScroll = new JScrollPane(wPan);
-                wScroll.setPreferredSize(new Dimension(450, 160));
-                JScrollPane aScroll = new JScrollPane(aPan); aScroll.setPreferredSize(new Dimension(450, 160));
-                JScrollPane rScroll = new JScrollPane(rPan); rScroll.setPreferredSize(new Dimension(450, 160));
+                JPanel wWrap = new JPanel(new BorderLayout()); wWrap.setBackground(PANEL_BG); wWrap.add(wPan, BorderLayout.NORTH);
+                JPanel aWrap = new JPanel(new BorderLayout()); aWrap.setBackground(PANEL_BG); aWrap.add(aPan, BorderLayout.NORTH);
+                JPanel rWrap = new JPanel(new BorderLayout()); rWrap.setBackground(PANEL_BG); rWrap.add(rPan, BorderLayout.NORTH);
+                
+                JScrollPane wScroll = new JScrollPane(wWrap); wScroll.setPreferredSize(new Dimension(450, 160));
+                JScrollPane aScroll = new JScrollPane(aWrap); aScroll.setPreferredSize(new Dimension(450, 160));
+                JScrollPane rScroll = new JScrollPane(rWrap); rScroll.setPreferredSize(new Dimension(450, 160));
                 tabs.addTab("Weapons", wScroll); tabs.addTab("Armor", aScroll); tabs.addTab("Relics", rScroll);
+                
+                if(lastInventoryTab < tabs.getTabCount()) tabs.setSelectedIndex(lastInventoryTab);
+                
                 dash.add(tabs, BorderLayout.CENTER);
                 content.add(dash);
 
             } else if(key.equals("STATS")) {
                 int[] b = player.getBonusStats();
-                JPanel statBox = new JPanel(new GridLayout(4, 2, 10, 10)); statBox.setOpaque(false);
+                JPanel statBox = new JPanel(new GridLayout(5, 2, 10, 10)); statBox.setOpaque(false);
                 statBox.add(createStatLabel("CLASS:", player.cls.title, ACCENT_COL));
                 statBox.add(createStatLabel("LEVEL:", player.level+"", Color.WHITE));
                 statBox.add(createStatLabel("ATK:", player.atk + " (+" + b[0] + ")", Color.WHITE));
@@ -622,6 +646,8 @@ public class Vanguards extends JFrame {
                 statBox.add(createStatLabel("LUK:", player.luk + " (+" + b[3] + ")", Color.WHITE));
                 double dodge = Math.min(0.60, (player.spd + b[2]) * 0.012) * 100;
                 statBox.add(createStatLabel("EVASION:", String.format("%.1f%%", dodge), Color.CYAN));
+                double parry = player.getParryChance() * 100;
+                statBox.add(createStatLabel("PARRY CHANCE:", String.format("%.1f%%", parry), Color.YELLOW));
                 content.add(statBox);
             } else if(key.equals("LEVEL_UP")) {
                 content.add(new JLabel("<html><font size='6' color='"+toHex(ACCENT_COL)+"'>POINTS: "+player.unspentStats+"</font></html>"));
@@ -640,17 +666,64 @@ public class Vanguards extends JFrame {
             }
             if(!key.equals("LEVEL_UP") && !key.equals("EMPTY")) { 
                 StylizedButton back = new StylizedButton("BACK");
-                back.addActionListener(e -> { sellMode = false; setMenu("MAIN"); }); p.add(back, BorderLayout.SOUTH);
+                back.addActionListener(e -> { setMenu("MAIN"); }); p.add(back, BorderLayout.SOUTH);
             }
             p.add(content, BorderLayout.CENTER); p.revalidate(); p.repaint();
         }
+        
+        private JPanel createItemCard(Equipment eq, boolean isEq, Player p) {
+            JPanel c = new JPanel(new BorderLayout());
+            c.setBorder(BorderFactory.createLineBorder(eq.rarity.col, 2));
+            c.setBackground(new Color(25,25,30));
+            
+            JLabel n = new JLabel((isEq?"[E] ":"") + eq.name);
+            n.setForeground(eq.rarity.col);
+            n.setFont(new Font("SansSerif", Font.BOLD, 12));
+            n.setBorder(new EmptyBorder(5, 5, 0, 5));
+            
+            JLabel s = new JLabel("<html>ATK:"+eq.atk+" DEF:"+eq.def+"<br>SPD:"+eq.spd+" LUK:"+eq.luk+"<br>"+(eq.passive!=null?eq.passive:"")+"</html>");
+            s.setForeground(Color.LIGHT_GRAY);
+            s.setFont(new Font("SansSerif", Font.PLAIN, 10));
+            s.setBorder(new EmptyBorder(5, 5, 5, 5));
+            
+            JPanel bp = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 2));
+            bp.setOpaque(false);
+            
+            JButton eb = new JButton(isEq?"UNEQUIP":"EQUIP");
+            eb.setFont(new Font("SansSerif", Font.BOLD, 10));
+            eb.addActionListener(e -> {
+                if(isEq) {
+                    if(eq instanceof Relic) p.equippedRelics.remove(eq);
+                    else if(eq instanceof Weapon) p.equippedWeapon = null;
+                    else if(eq instanceof Armor) p.equippedArmor = null;
+                } else {
+                    if(eq instanceof Relic) { if(p.equippedRelics.size()<4) p.equippedRelics.add((Relic)eq); else log.append("Relics full!\n"); }
+                    else if(eq instanceof Weapon) p.equippedWeapon = (Weapon)eq;
+                    else if(eq instanceof Armor) p.equippedArmor = (Armor)eq;
+                }
+                setMenu("EQUIPMENT_DASH");
+            });
+            
+            JButton sb = new JButton("SELL(" + eq.rarity.sellValue + ")");
+            sb.setFont(new Font("SansSerif", Font.BOLD, 10));
+            if(isEq) sb.setEnabled(false);
+            sb.addActionListener(e -> {
+                p.inventory.remove(eq); p.gold += eq.rarity.sellValue;
+                log.append("[SYS] Sold " + eq.name + "\n");
+                setMenu("EQUIPMENT_DASH"); buildSideShop();
+            });
+            
+            bp.add(eb); bp.add(sb);
+            c.add(n, BorderLayout.NORTH); c.add(s, BorderLayout.CENTER); c.add(bp, BorderLayout.SOUTH);
+            return c;
+        }
 
-        private void addConsumableBtn(JPanel p, String name, int count, ActionListener a) {
-            StylizedButton b = new StylizedButton("<html><center>" + name + "<br>(" + count + ")</center></html>");
+        private void addConsumableBtn(JPanel p, String name, Supplier<Integer> countSupplier, ActionListener a) {
+            StylizedButton b = new StylizedButton("<html><center>" + name + "<br>(" + countSupplier.get() + ")</center></html>");
             b.setPreferredSize(new Dimension(140, 45));
             b.setFont(new Font("SansSerif", Font.BOLD, 12));
-            b.addActionListener(e -> { if(count > 0) a.actionPerformed(e); });
-            if(count == 0) b.setForeground(Color.DARK_GRAY); p.add(b);
+            b.addActionListener(e -> { if(!inputLocked && countSupplier.get() > 0) a.actionPerformed(e); });
+            if(countSupplier.get() == 0) b.setForeground(Color.DARK_GRAY); p.add(b);
         }
 
         private void buildSideShop() {
@@ -667,13 +740,33 @@ public class Vanguards extends JFrame {
                 StylizedButton btn = new StylizedButton("<html><center>" + it.name + "<br>" + it.price + "G</center></html>");
                 btn.setPreferredSize(new Dimension(260, 60));
                 if(it instanceof Equipment) { btn.setForeground(((Equipment)it).rarity.col); btn.setToolTipText(((Equipment)it).getStatsString()); }
+                else if(it.name.contains("Elixir")) btn.setForeground(Color.MAGENTA);
+                else if(it.name.contains("Mystery Box")) btn.setForeground(Color.YELLOW);
+                else if(it.name.contains("Familiar Crystal")) btn.setForeground(Color.CYAN);
                 
                 btn.addActionListener(e -> {
                     if(p.gold >= it.price) {
                         p.gold -= it.price;
                         if(it instanceof Equipment) p.inventory.add(it);
-                        else { if(it.name.contains("Greater")) p.greaterPots++; else if(it.name.contains("Damage")) p.dmgBuffs++; else p.healPots++; }
-                        shopStock.remove(it); log.append("[SYS] >> Purchased " + it.name + "!\n"); buildSideShop();
+                        else { 
+                            if(it.name.contains("Greater")) p.greaterPots++; 
+                            else if(it.name.contains("Damage")) p.dmgBuffs++; 
+                            else if(it.name.contains("Mystery Box")) {
+                                Equipment dropped = generateProceduralEquipment();
+                                p.inventory.add(dropped);
+                                log.append("[GACHA] >> Box contained: " + dropped.name + "!\n");
+                            }
+                            else if(it.name.contains("Elixir")) { p.atk += 2; p.def += 2; log.append("[SYS] >> Gained +2 Permanent ATK/DEF!\n"); }
+                            else if(it.name.contains("Familiar Crystal")) { p.hasPet = true; log.append("[SYS] >> Summoned a Familiar!\n"); }
+                            else if(it.name.contains("Forge Weapon")) {
+                                if(p.equippedWeapon != null) { p.equippedWeapon.atk += 15; p.equippedWeapon.price += 50; log.append("[SYS] >> Weapon Forged! +15 ATK\n"); }
+                                else { p.gold += it.price; log.append("[SYS] >> No weapon equipped to forge!\n"); shopStock.add(it); }
+                            }
+                            else p.healPots++; 
+                        }
+                        shopStock.remove(it); log.append("[SYS] >> Purchased " + it.name + "!\n"); 
+                        buildSideShop();
+                        if(currentMenuKey.equals("EQUIPMENT_DASH")) setMenu("EQUIPMENT_DASH");
                     } else { log.append("[SYS] >> Not enough Gold!\n"); }
                 });
                 items.add(btn);
@@ -716,7 +809,7 @@ public class Vanguards extends JFrame {
                 double comboMult = 1.0 + (p.combo * 0.05);
                 int baseDmg = calculateBaseDamage(move, p, b);
                 
-                if(p.activeBuffTurns > 0) { baseDmg *= 1.5; p.activeBuffTurns--; }
+                if(p.activeBuffTurns > 0) { baseDmg *= 1.5; }
                 if(enemy.weakTurns > 0) { baseDmg *= 1.2; } 
                 
                 if(p.equippedWeapon != null) {
@@ -763,7 +856,7 @@ public class Vanguards extends JFrame {
         }
 
         private int calculateBaseDamage(String m, Player p, int[] b) {
-            int tAtk = p.atk + b[0], tDef = p.def + b[1], tSpd = p.spd + b[2];
+            int tAtk = p.atk + b[0], tDef = p.def + b[1], tSpd = p.spd + b[2], tLuk = p.luk + b[3];
             if(m.contains("Basic")) return tAtk; 
             if(m.contains("Shield Bash")) return (int)(tDef * 1.8);
             if(m.contains("Aegis Crush")) return (int)(tDef * 2.5 + p.maxHp * 0.1);
@@ -774,6 +867,12 @@ public class Vanguards extends JFrame {
             if(m.contains("Backstab")) return (int)(tAtk + tSpd * 1.5);
             if(m.contains("Execution")) return (int)(tSpd * 2.5 + tAtk); 
             if(m.contains("Toxic Dart")) return (int)(tSpd * 1.8);
+            if(m.contains("Piercing Arrow")) return (int)(tSpd * 1.5 + tAtk);
+            if(m.contains("Volley")) return (int)(tSpd * 2.0 + tLuk);
+            if(m.contains("Snipe")) return (int)((tSpd + tAtk) * 2.5);
+            if(m.contains("Holy Strike")) return (int)(tAtk * 1.5 + p.maxHp * 0.05);
+            if(m.contains("Divine Favor")) return (int)(tAtk * 1.2 + tDef);
+            if(m.contains("Smite")) return (int)(tAtk * 2.0 + tDef * 1.5);
             return tAtk;
         }
 
@@ -796,6 +895,7 @@ public class Vanguards extends JFrame {
             p.energy = Math.min(p.maxEnergy, p.energy + 50);
             p.heal((int)(p.maxHp * 0.1));
             log.append("[COMBAT] >> Camped! Gained 50 Energy & 10% HP for 10 Gold.\n");
+            buildSideShop();
             inputLocked = true; setMenu("EMPTY");
             Timer t = new Timer(500, e -> endPlayerTurn());
             t.setRepeats(false); t.start();
@@ -811,6 +911,7 @@ public class Vanguards extends JFrame {
             dmgNums.add(new DamageNumber(p.fleePenalty, 280, 250, Color.MAGENTA, "-" + p.fleePenalty + "G"));
             log.append("[SYS] >> Fled! Lost " + p.fleePenalty + " Gold. Win Streak Reset.\n");
             p.fleePenalty += 10;
+            buildSideShop();
             
             inputLocked = true; setMenu("EMPTY");
             Timer t = new Timer(1000, e -> { spawnEnemy(); inputLocked = false; setMenu("MAIN"); });
@@ -821,6 +922,10 @@ public class Vanguards extends JFrame {
             Player p = state.player;
             p.energy = Math.min(p.maxEnergy, p.energy + 10);
             if(p.thornsTurns > 0) p.thornsTurns--;
+            if(p.activeBuffTurns > 0) {
+                p.activeBuffTurns--;
+                if(p.activeBuffTurns == 0) log.append("[COMBAT] >> Damage Buff expired.\n");
+            }
             for(Relic r : p.equippedRelics) {
                 if("Regeneration".equals(r.passive)) p.heal((int)(p.maxHp * 0.05));
                 if("Titan Shield".equals(r.passive)) p.shield += 15;
@@ -829,6 +934,7 @@ public class Vanguards extends JFrame {
             if(enemy.hp <= 0) {
                 log.append("[SYS] --- ENEMY VANQUISHED ---\n");
                 p.winStreak++; p.fleePenalty = 10; 
+                state.bountyKills++;
                 if (enemy.isBoss) rerollCost = 50;
                 
                 if(enemy.hp < -(enemy.maxHp * 0.3)) {
@@ -836,19 +942,22 @@ public class Vanguards extends JFrame {
                     p.xp += 50 + (enemy.level * 5);
                 }
 
-                if(enemy.isBoss || Math.random() < 0.45) {
-                    Equipment dropped = generateProceduralEquipment();
-                    boolean autoSold = false;
-                    if(autoSellCommon && dropped.rarity == Rarity.COMMON) autoSold = true;
-                    if(autoSellRare && dropped.rarity == Rarity.RARE) autoSold = true;
-                    if(autoSellEpic && dropped.rarity == Rarity.EPIC) autoSold = true;
-                    
-                    if(autoSold) {
-                        p.gold += dropped.rarity.sellValue;
-                        log.append("[LOOT] *** AUTO-SOLD " + dropped.name + " for " + dropped.rarity.sellValue + "G ***\n");
-                    } else {
-                        p.inventory.add(dropped);
-                        log.append("[LOOT] *** DROPPED: " + dropped.name + " ("+dropped.rarity.name+") ***\n");
+                int drops = enemy.elite == EliteModifier.CORRUPTED ? 2 : 1;
+                for(int i=0; i<drops; i++) {
+                    if(enemy.isBoss || Math.random() < 0.45 || enemy.elite == EliteModifier.CORRUPTED) {
+                        Equipment dropped = generateProceduralEquipment();
+                        boolean autoSold = false;
+                        if(autoSellCommon && dropped.rarity == Rarity.COMMON) autoSold = true;
+                        if(autoSellRare && dropped.rarity == Rarity.RARE) autoSold = true;
+                        if(autoSellEpic && dropped.rarity == Rarity.EPIC) autoSold = true;
+                        
+                        if(autoSold) {
+                            p.gold += dropped.rarity.sellValue;
+                            log.append("[LOOT] *** AUTO-SOLD " + dropped.name + " for " + dropped.rarity.sellValue + "G ***\n");
+                        } else {
+                            p.inventory.add(dropped);
+                            log.append("[LOOT] *** DROPPED: " + dropped.name + " ("+dropped.rarity.name+") ***\n");
+                        }
                     }
                 }
                 
@@ -856,6 +965,13 @@ public class Vanguards extends JFrame {
                 int goldGain = (int)((enemy.isBoss ? (60 + enemy.level*20) : (15 + enemy.level*5)) * goldMult);
                 p.gold += goldGain;
                 dmgNums.add(new DamageNumber(goldGain, 650, 280, Color.YELLOW, "+" + goldGain + "G"));
+                
+                if(state.bountyKills >= state.bountyTarget) {
+                    p.gold += state.bountyReward;
+                    log.append("[BOUNTY] >> Completed! Earned " + state.bountyReward + "G\n");
+                    dmgNums.add(new DamageNumber(state.bountyReward, 650, 250, Color.YELLOW, "BOUNTY!"));
+                    state.bountyKills = 0; state.bountyTarget += 2; state.bountyReward += 50;
+                }
                 
                 p.xp += enemy.isBoss ? 400 : 100;
                 p.shield = 0;
@@ -867,6 +983,13 @@ public class Vanguards extends JFrame {
                 });
                 t.setRepeats(false); t.start();
             } else { 
+                if(p.hasPet && enemy.hp > 0) {
+                    int petDmg = 15 + (p.level * 5);
+                    enemy.takeDamage(petDmg);
+                    log.append("[PET] >> Familiar attacks for " + petDmg + " dmg!\n");
+                    dmgNums.add(new DamageNumber(petDmg, 780, 220, Color.CYAN));
+                    if(enemy.hp <= 0) { endPlayerTurn(); return; }
+                }
                 Timer t = new Timer(500, e -> enemyTurn());
                 t.setRepeats(false); t.start(); 
             }
@@ -913,26 +1036,32 @@ public class Vanguards extends JFrame {
             enemy.currentAnim = "WINDUP";
             enemy.animTick = 0;
             enemy.onAnimComplete = () -> {
-                double bossEnrageMult = (enemy.isBoss && enemy.turnCounter > 8) ? 1.5 : 1.0;
-                double weaknessMult = (enemy.weakTurns > 0) ? 0.6 : 1.0;
-                int ed = (int)((enemy.atk * bossEnrageMult * weaknessMult) - (p.def + b[1])/2);
-                if(enemy.isBoss && enemy.turnCounter % 4 == 0) { ed *= 2.5; log.append("[COMBAT] >> OVERLORD USES DEVASTATING STRIKE!\n"); screenShake = 20; }
-                
-                ed = Math.max(5, ed);
-                p.takeDamage(ed);
-                dmgNums.add(new DamageNumber(ed, 280, 280, Color.RED)); p.combo = 0; 
-                
-                if(p.thornsTurns > 0) {
-                    int refDmg = ed / 2;
-                    enemy.takeDamage(refDmg);
-                    log.append("[COMBAT] >> Thorns reflected " + refDmg + " damage!\n");
-                    dmgNums.add(new DamageNumber(refDmg, 780, 280, Color.PINK));
-                }
-                
-                if(enemy.elite == EliteModifier.VAMPIRIC) { enemy.heal(ed/2); }
-                if(enemy.elite == EliteModifier.TOXIC && Math.random() < 0.3) {
-                    log.append("[COMBAT] >> You were poisoned by the Toxic enemy!\n");
-                    p.takeDamage(10);
+                if(Math.random() < p.getParryChance()) {
+                    log.append("[COMBAT] >> You PARRIED the attack! Damage negated.\n");
+                    dmgNums.add(new DamageNumber(0, 280, 280, Color.YELLOW, "PARRY!"));
+                    p.energy = Math.min(p.maxEnergy, p.energy + 10);
+                } else {
+                    double bossEnrageMult = (enemy.isBoss && enemy.turnCounter > 8) ? 1.5 : 1.0;
+                    double weaknessMult = (enemy.weakTurns > 0) ? 0.6 : 1.0;
+                    int ed = (int)((enemy.atk * bossEnrageMult * weaknessMult) - (p.def + b[1])/2);
+                    if(enemy.isBoss && enemy.turnCounter % 4 == 0) { ed *= 2.5; log.append("[COMBAT] >> OVERLORD USES DEVASTATING STRIKE!\n"); screenShake = 20; }
+                    
+                    ed = Math.max(5, ed);
+                    p.takeDamage(ed);
+                    dmgNums.add(new DamageNumber(ed, 280, 280, Color.RED)); p.combo = 0; 
+                    
+                    if(p.thornsTurns > 0) {
+                        int refDmg = ed / 2;
+                        enemy.takeDamage(refDmg);
+                        log.append("[COMBAT] >> Thorns reflected " + refDmg + " damage!\n");
+                        dmgNums.add(new DamageNumber(refDmg, 780, 280, Color.PINK));
+                    }
+                    
+                    if(enemy.elite == EliteModifier.VAMPIRIC) { enemy.heal(ed/2); }
+                    if(enemy.elite == EliteModifier.TOXIC && Math.random() < 0.3) {
+                        log.append("[COMBAT] >> You were poisoned by the Toxic enemy!\n");
+                        p.takeDamage(10);
+                    }
                 }
                 
                 if(p.hp <= 0) { 
@@ -981,7 +1110,11 @@ public class Vanguards extends JFrame {
             shopStock.add(generateProceduralEquipment()); 
             shopStock.add(generateProceduralEquipment()); 
             shopStock.add(new Consumable("Greater Potion", 50, "HEAL")); 
-            shopStock.add(new Consumable("Damage Buff Potion", 75, "BUFF")); 
+            if(Math.random() < 0.5) shopStock.add(new Consumable("Damage Buff Potion", 75, "BUFF")); 
+            else shopStock.add(new Consumable("Elixir of Power", 150, "PERM_ATK"));
+            shopStock.add(new Consumable("Mystery Box", 100, "GACHA"));
+            if(state.player.level >= 3 && !state.player.hasPet) shopStock.add(new Consumable("Familiar Crystal", 300, "PET"));
+            shopStock.add(new Consumable("Forge Weapon", 150, "UPGRADE"));
             buildSideShop();
         }
 
@@ -999,10 +1132,11 @@ public class Vanguards extends JFrame {
             g.setColor(new Color(255,255,255,150)); g.setFont(UI_FONT);
             g.drawString("Encounter: " + state.encounters, 20, 30);
             g.drawString("Streak: " + state.player.winStreak, 20, 50);
+            g.drawString("Bounty: " + state.bountyKills + "/" + state.bountyTarget, 20, 70);
             if(state.player.combo > 1) { 
                 int cSize = Math.min(45, 28 + state.player.combo * 2);
                 g.setColor(state.player.combo > 5 ? Color.RED : XP_ORANGE);
-                g.setFont(new Font("Impact", Font.ITALIC, cSize)); g.drawString(state.player.combo + "x COMBO", 20, 85);
+                g.setFont(new Font("Impact", Font.ITALIC, cSize)); g.drawString(state.player.combo + "x COMBO", 20, 105);
             }
             
             if(enemy != null && enemy.isBoss) drawBar(g, 150, 40, "OVERLORD", enemy.displayHp, enemy.maxHp, new Color(180, 20, 20), 650, 25);
@@ -1145,7 +1279,7 @@ public class Vanguards extends JFrame {
             setLayout(new FlowLayout(FlowLayout.CENTER, 50, 350));
             for(ClassType ct : ClassType.values()) {
                 StylizedButton b = new StylizedButton("<html><center>" + ct.title + "<br><font size='3' color='gray'>" + ct.scaleDesc + "</font></center></html>");
-                b.setPreferredSize(new Dimension(280, 100));
+                b.setPreferredSize(new Dimension(220, 100));
                 b.addActionListener(e -> { state.player = new Player(ct); ACCENT_COL = ct.color; battlePanel.initSession(); cards.show(mainContainer, "BATTLE"); }); add(b);
             }
         }
@@ -1182,7 +1316,7 @@ public class Vanguards extends JFrame {
         }
     }
 
-    static class GameState { Player player; int encounters = 1; }
+    static class GameState { Player player; int encounters = 1; int bountyKills = 0, bountyTarget = 3, bountyReward = 100; }
     
     public static void main(String[] args) { SwingUtilities.invokeLater(() -> new Vanguards().setVisible(true)); }
 }
